@@ -203,7 +203,7 @@ class GravitySim2D:
         self.pos[step + 1, i] += new_pos
         self.pos[step + 1, j] += new_pos
 
-    def _step(self, step: int = 0) -> None:
+    def _step(self, step) -> None:
         """Performs a single time step in the simulation using the Euler-Cromer method,
         newtons law of gravity, and newtons third law
 
@@ -357,7 +357,6 @@ class GravitySim2D:
         returns:
             None
         """
-
         if not 0 < shrink < 1:
             raise ValueError("shrink ratio must be between 0 and 1")
 
@@ -451,7 +450,7 @@ if __name__ == "__main__":
     # Parameters
     time = 2000  # simulation time [s]
     time_step = 0.1  # time step [s]
-    gravity_strength = 1  # strength of newtons force of gravity (analogous to big G)
+    gravity_strength = 1e-11  # strength of newtons force of gravity (analogous to big G)
     masses = [  # relative body masses
         1,
         1,
@@ -460,15 +459,15 @@ if __name__ == "__main__":
 
     r0 = [  # Initial positions
         [0, 0],
-        [0, 50],
+        [0, 20],
         [10, 25],
     ]
-    # v0 = [  # Initial velocities
-    #     [1, 1],
-    #     [1, -1],
-    #     [0.5, 0.1],
-    # ]
-    v0 = np.zeros((len(masses), 2))
+    v0 = [  # Initial velocities
+        [1, 1],
+        [1, -1],
+        [0.5, 0.5],
+    ]
+    # v0 = np.zeros((len(masses), 2))
 
     sim = GravitySim2D(
         time=time,
