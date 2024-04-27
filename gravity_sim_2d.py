@@ -9,13 +9,13 @@ Pathlike: TypeAlias = str | Path
 
 
 def newton_gravity(
-    vector: np.ndarray, masses: Iterable, gravity_strength: float = 1
+    pos_vector: np.ndarray, masses: Iterable[float], gravity_strength: float = 1
 ) -> np.ndarray:
     """Calculates the force of Newtonian force of gravity between two bodies, on body 1 from body 2.
     The inverse force from body 1 unto body 2 is the same magnitude, but opposite direction.
 
     arguments:
-        vector: positional vector from body 1 to body 2
+        pos_vector: positional vector from body 1 to body 2
         masses: relative masses of two bodies [mass1, mass2]
         gravity_strength: strength of newtons force of gravity (analogous to big G). Defaults to 1.
 
@@ -23,7 +23,11 @@ def newton_gravity(
         np.ndarray: force vector on body 1 from body 2
     """
     return (
-        gravity_strength * masses[0] * masses[1] * vector / np.linalg.norm(vector) ** 3
+        gravity_strength
+        * masses[0]
+        * masses[1]
+        * pos_vector
+        / np.linalg.norm(pos_vector) ** 3
     )
 
 
@@ -135,18 +139,20 @@ class GravitySim2D:
                 if np.linalg.norm(dist_vector) < pos_min:
                     continue
 
-                m1 = self.masses[i]
-                m2 = self.masses[j]
-                force = newton_gravity(dist_vector, [m1, m2], self.gravity_strength)
+                force = newton_gravity(dist_vector, self.masses, self.gravity_strength)
 
                 # Body i
-                self.vel[step + 1, i] = self.vel[step, i] + force / m1 * self.time_step
+                self.vel[step + 1, i] = (
+                    self.vel[step, i] + force / self.masses[i] * self.time_step
+                )
                 self.pos[step + 1, i] = (
                     self.pos[step, i] + self.vel[step + 1, i] * self.time_step
                 )
 
                 # Body j
-                self.vel[step + 1, j] = self.vel[step, j] - force / m2 * self.time_step
+                self.vel[step + 1, j] = (
+                    self.vel[step, j] - force / self.masses[j] * self.time_step
+                )
                 self.pos[step + 1, j] = (
                     self.pos[step, j] + self.vel[step + 1, j] * self.time_step
                 )
@@ -163,8 +169,8 @@ class GravitySim2D:
                     denum = m1 * v1 + m2 * v2
                     if all(denum) == 0:  # momentum cancels out: they must stop
                         new_vel = np.zeros_like(v1)
-                        self.pos[step + 1:, i] = self.pos[step + 1, i]
-                        self.pos[step + 1:, j] = self.pos[step + 1, j]
+                        self.pos[step + 1 :, i] = self.pos[step + 1, i]
+                        self.pos[step + 1 :, j] = self.pos[step + 1, j]
                     else:
                         new_vel = (m1 + m2) / (denum)
                     self.vel[step + 1, i] = new_vel
@@ -228,22 +234,71 @@ class GravitySim2D:
         else:
             plt.show()
 
+    def _set_axis_limits(self, ax: plt.Axes, frame: int, scale: float = 5) -> None:
+        """Sets the axis limits to fit all bodies in the plot,
+        if they are significantly outside/inside the current limits
+
+        arguments:
+            ax: the matplotlib axis object
+            frame: the current frame number
+            scale: scale factor to add to the limits. Defaults to 5.
+
+        returns:
+            None
+        """
+
+        x0, x1 = ax.get_xlim()
+        y0, y1 = ax.get_ylim()
+        # Multiply each limits by the scale factor if its outside the limits (keep equal axis scale)
+        if (
+            any(self.pos[frame, :, 0] < x0)
+            or any(self.pos[frame, :, 0] > x1)
+            or any(self.pos[frame, :, 1] < y0)
+            or any(self.pos[frame, :, 1] > y1)
+        ):
+            x0 -= abs(x0 * scale)
+            ax.set_xlim(x0, -x0)
+            y0 -= abs(y0 * scale)
+            ax.set_ylim(y0, -y0)
+
     def animate(
-        self, filename: Pathlike = "", figsize: tuple[int, int] = (7, 5)
+        self,
+        ms: float = None,
+        filename: Pathlike = "",
+        figsize: tuple[int, int] = (7, 5),
     ) -> None:
-        """Animates the 2D motion of the bodies"""
+        """Animates the 2D motion of the bodies
+
+        arguments:
+            ms: milliseconds delay between frames. Defaults to self.time_step.
+            filename: filename to save the animation to. If none, shows the animation instead.
+            figsize: figure size. Defaults to (7, 5).
+
+        returns:
+            None
+        """
+        if ms is None:
+            ms = self.time_step
+
         fig, ax = plt.subplots(figsize=figsize)
 
         # Plot initial positions
         scatters = [ax.scatter(*self.pos[0, i]) for i in range(self.n_bodies)]
 
-        def update(frame):
+        # Initial axis limits
+        self._set_axis_limits(ax, 0)
+
+        def update(frame: int):
             for i, scatter in enumerate(scatters):
                 scatter.set_offsets(self.pos[frame, i])
+
+            # Update title with time
             fig.suptitle(f"Time: {self.t[frame]:.2f} s")
 
+            # Update axis limits to fit all bodies
+            self._set_axis_limits(ax, frame)
+
         # Create animation
-        ms = 10  # milliseconds per frame
         anim = FuncAnimation(fig, update, frames=len(self.t), interval=ms)
 
         # Config
@@ -253,7 +308,9 @@ class GravitySim2D:
 
         # Save or show animation
         if filename:
-            anim.save(filename, writer="ffmpeg")
+            # anim.save(filename)
+            video = anim.to_html5_video()
+            video.save(filename)
         else:
             plt.show()
 
@@ -261,14 +318,14 @@ class GravitySim2D:
 if __name__ == "__main__":
     # Parameters
     n_bodies = 2  # number of bodies in the simulation
-    time = 1000  # simulation time [s]
-    time_step = 1e-1  # time step [s]
-    masses = [1, 5]  # body relative masses
-    gravity_strength = 1  # strength of newtons force of gravity (analogous to big G)
+    time = 100  # simulation time [s]
+    time_step = 0.1  # time step [s]
+    masses = [1, 10]  # relative body masses
+    gravity_strength = 2  # strength of newtons force of gravity (analogous to big G)
 
     # # Set initial conditions for every body
     r0 = [[0, 0], [0, 10]]  # initial positions of the bodies (x0, y0), (x1, y1) etc.
-    v0 = [[0, 0], [0, 0]]  # initial velocities
+    v0 = [[1, 1], [0, -1]]  # initial velocities
 
     sim = GravitySim2D(
         time=time,
@@ -278,5 +335,6 @@ if __name__ == "__main__":
         gravity_strength=gravity_strength,
     )
     sim.simulate(r0, v0)
-    sim.plot1d()
+    # sim.plot1d()
+    # sim.animate(filename="test.gif")
     sim.animate()
