@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+from matplotlib.animation import FuncAnimation, ArtistAnimation
 
 Pathlike: TypeAlias = str | Path
 
@@ -51,8 +51,6 @@ class GravitySim2D:
 
         if n_bodies < 2:
             raise ValueError("n_bodies must be greater than one.")
-        if n_bodies > 6:
-            raise NotImplementedError("n_bodies must be less than six.")
 
         # Set instance variables
         self.time = time
@@ -147,7 +145,10 @@ class GravitySim2D:
                 )
 
     def plot1d(
-        self, axis: int | str = "both", filename: Pathlike = "", figsize=(7, 5)
+        self,
+        axis: int | str = "both",
+        filename: Pathlike = "",
+        figsize: tuple[int, int] = (7, 5),
     ) -> None:
         """Plots the 2D motion of the bodies
 
@@ -190,10 +191,14 @@ class GravitySim2D:
         else:
             plt.show()
 
-    def animate(self, filename: Pathlike = "") -> None:
+    def animate(
+        self, filename: Pathlike = "", figsize: tuple[int, int] = (7, 5)
+    ) -> None:
         """Animates the 2D motion of the bodies"""
-        ...
+        fig, ax = plt.subplots(figsize=figsize)
 
+        # Animate
+        
 
 if __name__ == "__main__":
     # Parameters
@@ -215,3 +220,4 @@ if __name__ == "__main__":
         gravity_strength=gravity_strength,
     )
     sim.simulate(r0, v0)
+    sim.animate()
