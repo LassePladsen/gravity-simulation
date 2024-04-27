@@ -64,6 +64,8 @@ class GravitySim2D:
         self.t = np.arange(0, time, time_step)  # time array
         self.reset()
 
+        self._break = False  # flag to break the simulation
+
     def reset(self) -> None:
         """Resets the position and velocity arrays to zero. Shape: [2, n_bodies, n_steps]
 
@@ -105,9 +107,12 @@ class GravitySim2D:
         self.pos[0] = pos_init
         self.vel[0] = vel_init
 
+        self._break = False
         # Simulate the motion of the bodies
-        for i in range(self.n_steps - 1):
-            self._step(i)
+        for step in range(self.n_steps - 1):
+            if self._break:
+                break
+            self._step(step)
 
         return self.t, self.pos
 
@@ -123,26 +128,66 @@ class GravitySim2D:
         """
         for i in range(self.n_bodies - 1):
             for j in range(i + 1, self.n_bodies):
-                vector = self.pos[step, j] - self.pos[step, i]
-                force = newton_gravity(
-                    vector, [self.masses[i], self.masses[j]], self.gravity_strength
-                )
+                dist_vector = self.pos[step, j] - self.pos[step, i]
+
+                # Skip if they are at the same position
+                pos_min = 0.1
+                if np.linalg.norm(dist_vector) < pos_min:
+                    continue
+
+                m1 = self.masses[i]
+                m2 = self.masses[j]
+                force = newton_gravity(dist_vector, [m1, m2], self.gravity_strength)
 
                 # Body i
-                self.vel[step + 1, i] = (
-                    self.vel[step, i] + force / self.masses[i] * self.time_step
-                )
+                self.vel[step + 1, i] = self.vel[step, i] + force / m1 * self.time_step
                 self.pos[step + 1, i] = (
                     self.pos[step, i] + self.vel[step + 1, i] * self.time_step
                 )
 
                 # Body j
-                self.vel[step + 1, j] = (
-                    self.vel[step, j] - force / self.masses[j] * self.time_step
-                )
+                self.vel[step + 1, j] = self.vel[step, j] - force / m2 * self.time_step
                 self.pos[step + 1, j] = (
                     self.pos[step, j] + self.vel[step + 1, j] * self.time_step
                 )
+
+                # If collision: use inelastic momentum conservation (they stick together)
+                if (
+                    np.linalg.norm(self.pos[step + 1, i] - self.pos[step + 1, j])
+                    < pos_min
+                ):
+                    # print(f"Collision! at time {step* self.time_step}")
+                    # print(np.linalg.norm(self.pos[step + 1, i] - self.pos[step + 1, j]))
+                    # print(self.pos[step + 1, i])
+                    # print(self.pos[step + 1, j])
+                    v1 = self.vel[step + 1, i]
+                    v2 = self.vel[step + 1, j]
+
+                    # New shared velocity
+                    # print(v1)
+                    # print(v2)
+                    denum = m1 * v1 + m2 * v2
+                    if all(denum) == 0:
+                        new_vel = np.zeros_like(v1)
+                    else:
+                        new_vel = (m1 + m2) / (denum)
+                    self.vel[step + 1, i] = new_vel
+                    self.vel[step + 1, j] = new_vel
+                    print(self.pos[step + 1, i])
+                    print(self.pos[step + 1, j])
+                    print(self.vel[step + 1, i])
+                    print(self.vel[step + 1, j])
+
+                """# DEBUG: Stop early if they are extremely far away from each other
+                pos_max = 1000
+                if (
+                    np.linalg.norm(self.pos[step + 1, i] - self.pos[step + 1, j])
+                    > pos_max
+                ):
+                    # Replace rest of array with these last values
+                    self.pos[step + 1 :] = self.pos[step + 1]
+                    self._break = True
+                    return"""
 
     def plot1d(
         self,
@@ -197,14 +242,36 @@ class GravitySim2D:
         """Animates the 2D motion of the bodies"""
         fig, ax = plt.subplots(figsize=figsize)
 
-        # Animate
-        
+        # Plot initial positions
+        scatters = [ax.scatter(*self.pos[0, i]) for i in range(self.n_bodies)]
+
+        def update(frame):
+            for i, scatter in enumerate(scatters):
+                scatter.set_offsets(self.pos[frame, i])
+            fig.suptitle(f"Time: {self.t[frame]:.2f} s")
+
+        # Create animation
+        ms = 1  # milliseconds per frame
+        anim = FuncAnimation(fig, update, frames=len(self.t), interval=ms)
+
+        # Config
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.axis("equal")
+        plt.legend()
+
+        # Save or show animation
+        if filename:
+            anim.save(filename, writer="ffmpeg")
+        else:
+            plt.show()
+
 
 if __name__ == "__main__":
     # Parameters
     n_bodies = 2  # number of bodies in the simulation
     time = 1000  # simulation time [s]
-    time_step = 0.2  # time step [s]
+    time_step = 1e-1  # time step [s]
     masses = [1, 1]  # body relative masses
     gravity_strength = 1  # strength of newtons force of gravity (analogous to big G)
 
@@ -220,4 +287,5 @@ if __name__ == "__main__":
         gravity_strength=gravity_strength,
     )
     sim.simulate(r0, v0)
+    sim.plot1d()
     sim.animate()
