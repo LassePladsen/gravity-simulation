@@ -135,7 +135,7 @@ class GravitySim2D:
                 dist_vector = self.pos[step, j] - self.pos[step, i]
 
                 # Skip if they are at the same position
-                pos_min = 0.1
+                pos_min = 0.01
                 if np.linalg.norm(dist_vector) < pos_min:
                     continue
 
@@ -164,6 +164,8 @@ class GravitySim2D:
                 ):
                     v1 = self.vel[step + 1, i]
                     v2 = self.vel[step + 1, j]
+                    m1 = self.masses[i]
+                    m2 = self.masses[j]
 
                     # New shared velocity
                     denum = m1 * v1 + m2 * v2
@@ -176,7 +178,7 @@ class GravitySim2D:
                     self.vel[step + 1, i] = new_vel
                     self.vel[step + 1, j] = new_vel
 
-                # DEBUG: Stop early if they are extremely far away from each other
+                """# DEBUG: Stop early if they are extremely far away from each other
                 pos_max = 1000
                 if (
                     np.linalg.norm(self.pos[step + 1, i] - self.pos[step + 1, j])
@@ -185,7 +187,7 @@ class GravitySim2D:
                     # Replace rest of array with these last values
                     self.pos[step + 1 :] = self.pos[step + 1]
                     self._break = True
-                    return
+                    return"""
 
     def plot1d(
         self,
@@ -234,32 +236,58 @@ class GravitySim2D:
         else:
             plt.show()
 
-    def _set_axis_limits(self, ax: plt.Axes, frame: int, scale: float = 5) -> None:
+    def _set_axis_limits(
+        self, ax: plt.Axes, frame: int, grow: float = 5, shrink: float = 51 / 100
+    ) -> None:
         """Sets the axis limits to fit all bodies in the plot,
         if they are significantly outside/inside the current limits
 
         arguments:
             ax: the matplotlib axis object
             frame: the current frame number
-            scale: scale factor to add to the limits. Defaults to 5.
+            grow: grow scale factor to multiply limits by.
+            shirnk: shrink scale factor. This is the ratio of the current square
+                    to set the new limits from as [shrink * (x1-x0, y1-y0)]
+                    Must be between 0 and 1.
 
         returns:
             None
         """
 
+        if not 0 < shrink < 1:
+            raise ValueError("shrink ratio must be between 0 and 1")
+
         x0, x1 = ax.get_xlim()
         y0, y1 = ax.get_ylim()
-        # Multiply each limits by the scale factor if its outside the limits (keep equal axis scale)
+
+        # Handle the cases where bodies exit the limits/the figure
         if (
             any(self.pos[frame, :, 0] < x0)
             or any(self.pos[frame, :, 0] > x1)
             or any(self.pos[frame, :, 1] < y0)
             or any(self.pos[frame, :, 1] > y1)
         ):
-            x0 -= abs(x0 * scale)
+            x0 -= abs(x0 * grow)
             ax.set_xlim(x0, -x0)
-            y0 -= abs(y0 * scale)
+            y0 -= abs(y0 * grow)
             ax.set_ylim(y0, -y0)
+
+        # Handle the case where the limits are too big for the current body positions
+        # This will be when all bodies are inside a certain fraction of total limit square
+        dx = (1 - shrink) * (x1 - x0)
+        dy = (1 - shrink) * (y1 - y0)
+        x0 += dx
+        x1 -= dx
+        y0 += dy
+        y1 -= dy
+        if (
+            all(self.pos[frame, :, 0] > x0)
+            and all(self.pos[frame, :, 0] < x1)
+            and all(self.pos[frame, :, 1] > y0)
+            and all(self.pos[frame, :, 1] < y1)
+        ):
+            ax.set_xlim(x0, x1)
+            ax.set_ylim(y0, y1)
 
     def animate(
         self,
@@ -308,33 +336,31 @@ class GravitySim2D:
 
         # Save or show animation
         if filename:
-            # anim.save(filename)
-            video = anim.to_html5_video()
-            video.save(filename)
+            anim.save(filename)
+            # video = anim.to_html5_video()
+            # video.save(filename)
         else:
             plt.show()
 
 
 if __name__ == "__main__":
     # Parameters
-    n_bodies = 2  # number of bodies in the simulation
-    time = 100  # simulation time [s]
-    time_step = 0.1  # time step [s]
-    masses = [1, 10]  # relative body masses
-    gravity_strength = 2  # strength of newtons force of gravity (analogous to big G)
+    time = 2000  # simulation time [s]
+    time_step = 0.2  # time step [s]
+    masses = [1, 1]  # relative body masses
+    gravity_strength = 6.67e-11  # strength of newtons force of gravity (analogous to big G)
 
     # # Set initial conditions for every body
-    r0 = [[0, 0], [0, 10]]  # initial positions of the bodies (x0, y0), (x1, y1) etc.
-    v0 = [[1, 1], [0, -1]]  # initial velocities
+    r0 = [[0, 0], [0, 50]]  # initial positions of the bodies (x0, y0), (x1, y1) etc.
+    v0 = [[1, 1], [1, -1]]  # initial velocities
 
     sim = GravitySim2D(
         time=time,
         time_step=time_step,
-        n_bodies=n_bodies,
+        n_bodies=len(masses),
         masses=masses,
         gravity_strength=gravity_strength,
     )
     sim.simulate(r0, v0)
     # sim.plot1d()
-    # sim.animate(filename="test.gif")
     sim.animate()
