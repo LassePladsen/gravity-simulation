@@ -134,12 +134,12 @@ class GravitySim2D:
             for j in range(i + 1, self.n_bodies):
                 dist_vector = self.pos[step, j] - self.pos[step, i]
 
-                # Skip if they are at the same position
+                # Skip updating velocities if they are at the same position
                 pos_min = 0.01
                 if np.linalg.norm(dist_vector) < pos_min:
-                    continue
-
-                force = newton_gravity(dist_vector, self.masses, self.gravity_strength)
+                    force = 0
+                else:
+                    force = newton_gravity(dist_vector, self.masses, self.gravity_strength)
 
                 # Body i
                 self.vel[step + 1, i] = (
@@ -166,15 +166,19 @@ class GravitySim2D:
                     v2 = self.vel[step + 1, j]
                     m1 = self.masses[i]
                     m2 = self.masses[j]
+                    # print("Collision at step", step)
+                    # print(v1, v2)
 
                     # New shared velocity
-                    denum = m1 * v1 + m2 * v2
-                    if all(denum) == 0:  # momentum cancels out: they must stop
+                    denominator = m1 * v1 + m2 * v2
+                    if all(denominator == 0):  # momentum cancels out: they must stop
                         new_vel = np.zeros_like(v1)
                         self.pos[step + 1 :, i] = self.pos[step + 1, i]
                         self.pos[step + 1 :, j] = self.pos[step + 1, j]
                     else:
-                        new_vel = (m1 + m2) / (denum)
+                        new_vel = (m1 + m2) / (denominator)
+                        new_vel[new_vel == np.inf] = 0
+                        # print(new_vel)
                     self.vel[step + 1, i] = new_vel
                     self.vel[step + 1, j] = new_vel
 
@@ -246,7 +250,7 @@ class GravitySim2D:
             ax: the matplotlib axis object
             frame: the current frame number
             grow: grow scale factor to multiply limits by.
-            shirnk: shrink scale factor. This is the ratio of the current square
+            shrink: shrink scale factor. This is the ratio of the current square
                     to set the new limits from as [shrink * (x1-x0, y1-y0)]
                     Must be between 0 and 1.
 
@@ -348,7 +352,9 @@ if __name__ == "__main__":
     time = 2000  # simulation time [s]
     time_step = 0.2  # time step [s]
     masses = [1, 1]  # relative body masses
-    gravity_strength = 6.67e-11  # strength of newtons force of gravity (analogous to big G)
+    gravity_strength = (
+        6.67e-11  # strength of newtons force of gravity (analogous to big G)
+    )
 
     # # Set initial conditions for every body
     r0 = [[0, 0], [0, 50]]  # initial positions of the bodies (x0, y0), (x1, y1) etc.
