@@ -28,7 +28,7 @@ def newton_gravity(
 
 
 class GravitySim2D:
-    """2D simulation of the motion of n bodies under the influence of gravity, using Newton's law of gravity"""
+    """2D gravity simulation of bodies using Newton's law of gravity, without collision."""
 
     def __init__(
         self,
@@ -48,6 +48,11 @@ class GravitySim2D:
             gravity_strength: strength of newtons force of gravity (analogous to big G).
                                 Defaults to 1.
         """
+
+        if n_bodies < 2:
+            raise ValueError("n_bodies must be greater than one.")
+        if n_bodies > 6:
+            raise NotImplementedError("n_bodies must be less than six.")
 
         # Set instance variables
         self.time = time
@@ -141,36 +146,53 @@ class GravitySim2D:
                     self.pos[step, j] + self.vel[step + 1, j] * self.time_step
                 )
 
-    def plot2d(self, axis: int = 0, filename: Pathlike = "") -> None:
+    def plot1d(
+        self, axis: int | str = "both", filename: Pathlike = "", figsize=(7, 5)
+    ) -> None:
         """Plots the 2D motion of the bodies
 
         arguments:
-            axis: axis to plot (0=x, 1=y). Defaults to 0.
+            axis: axis to plot (0=x, 1=y, "both"=x and y). Defaults to both.
             filename: filename to save the plot to. If none, shows the plot instead.
 
         returns:
             None
         """
-        if axis not in [0, 1]:
+        if axis not in [0, 1, "both"]:
             raise ValueError(
-                "axis must be either 0 or 1 (respectively x-axis or y-axis)"
+                "axis must be either 0, 1, or 'both' (respectively x-axis or y-axis, or both)"
             )
-        
+
         if not isinstance(filename, (str, Path)):
             raise ValueError("filename must be a string or a pathlib.Path object")
 
-        plt.plot(self.t, self.pos[:, 0, axis], label="body 1")
-        plt.plot(self.t, self.pos[:, 1, axis], label="body 2")
-        plt.xlabel("Time [s]")
+        # Plotting
+        if axis == "both":
+            fig, axs = plt.subplots(2, 1, figsize=figsize)
+            for i in range(n_bodies):
+                axs[0].plot(self.t, self.pos[:, i, 0], label=f"body {i}")
+                axs[1].plot(self.t, self.pos[:, i, 1], label=f"body {i}")
+            axs[0].set_ylabel("x")
+            axs[1].set_ylabel("y")
+        else:
+            fig, ax = plt.subplots(1, 1, figsize=figsize)
+            for i in range(n_bodies):
+                ax.plot(self.t, self.pos[:, i, axis], label=f"body {i}")
+            ylabel = "x" if axis == 0 else "y"
+            plt.ylabel(ylabel)
 
-        ylabel = "x" if axis == 0 else "y"
-        plt.ylabel(ylabel)
+        # Config
+        fig.supxlabel("Time [s]")
         plt.legend()
 
         if filename:
             plt.savefig(filename)
         else:
             plt.show()
+
+    def animate(self, filename: Pathlike = "") -> None:
+        """Animates the 2D motion of the bodies"""
+        ...
 
 
 if __name__ == "__main__":
@@ -182,7 +204,7 @@ if __name__ == "__main__":
     gravity_strength = 1  # strength of newtons force of gravity (analogous to big G)
 
     # # Set initial conditions for every body
-    r0 = [[0, 0], [10, 10]]  # initial positions of the bodies (x0, y0), (x1, y1) etc.
+    r0 = [[0, 0], [0, 10]]  # initial positions of the bodies (x0, y0), (x1, y1) etc.
     v0 = [[0, 0], [0, 0]]  # initial velocities
 
     sim = GravitySim2D(
@@ -193,4 +215,3 @@ if __name__ == "__main__":
         gravity_strength=gravity_strength,
     )
     sim.simulate(r0, v0)
-
