@@ -120,6 +120,89 @@ class GravitySim2D:
 
         return self.t, self.pos
 
+    def _normal_step_update(
+        self, step: int, i: int, j: int, dist_vector: np.ndarray
+    ) -> None:
+        """Updates the position and velocity arrays for a normal time step
+
+        arguments:
+            step: step number
+            i: index for body 1
+            j: index for body 2
+            dist_vector: vector from body i to body j
+
+        returns:
+            None
+        """
+        # Gravity
+        force = newton_gravity(dist_vector, self.masses, self.gravity_strength)
+
+        # Update velocities
+        self.vel[step + 1, i] += (
+            self.vel[step, i] + force / self.masses[i] * self.time_step
+        )
+        self.vel[step + 1, j] += (
+            self.vel[step, j] - force / self.masses[j] * self.time_step
+        )
+
+        # Update positions
+        self.pos[step + 1, i] += (
+            self.pos[step, i] + self.vel[step + 1, i] * self.time_step
+        )
+        self.pos[step + 1, j] += (
+            self.pos[step, j] + self.vel[step + 1, j] * self.time_step
+        )
+
+    def _step_colission_update(self, step: int, i: int, j: int):
+        """Updates the position and velocity arrays for a time step with collision
+
+        arguments:
+            step: step number
+            i: index for body 1
+            j: index for body 2
+            dist_vector: vector from body i to body j
+
+        returns:
+            None
+        """
+
+        veli = self.vel[step, i]
+        velj = self.vel[step, j]
+
+        # Case 1: both bodies have already stopped: skip calculations
+        if self.n_bodies == 2 and all(veli == velj) and all(veli == 0):
+            return
+
+        # Case 2: They now stick together with the same velocity
+        massi = self.masses[i]
+        massj = self.masses[j]
+        denominator = massi * veli + massj * velj
+
+        # Momentum cancels out: they must stop
+        if all(denominator == 0):
+            newpos = self.pos[step, i]
+            self.pos[step + 1, i] += newpos
+            self.pos[step + 1, j] += newpos
+
+            # New velocities are zero
+            self.vel[step + 1] = np.zeros((self.n_bodies, 2))
+            return
+
+        # Momentum does not cancel out; they still move together
+        # Calculate this new shared velocity
+        np.seterr(divide="ignore")  # ignore division by zero warning
+        new_vel = (massi + massj) / (denominator)
+        new_vel[new_vel == np.inf] = 0  # replace inf with zero
+
+        # Update velocities from collision
+        self.vel[step + 1, i] += new_vel
+        self.vel[step + 1, j] += new_vel
+
+        # Update positions from collision
+        new_pos = self.pos[step, i] + new_vel * self.time_step
+        self.pos[step + 1, i] += new_pos
+        self.pos[step + 1, j] += new_pos
+
     def _step(self, step: int = 0) -> None:
         """Performs a single time step in the simulation using the Euler-Cromer method,
         newtons law of gravity, and newtons third law
@@ -130,68 +213,85 @@ class GravitySim2D:
         return:
             None
         """
+
         for i in range(self.n_bodies - 1):
             for j in range(i + 1, self.n_bodies):
-                dist_vector = self.pos[step, j] - self.pos[step, i]
+                posi = self.pos[step, i]
+                posj = self.pos[step, j]
+                dist_vector = posj - posi
 
-                # Skip updating velocities if they are at the same position
-                pos_min = 0.01
-                if np.linalg.norm(dist_vector) < pos_min:
+                # Check for collision
+                pos_tol = 0.2  # position tolerance for collision
+
+                # No collision; normal gravity update
+                if np.linalg.norm(dist_vector) > pos_tol:
+                    self._normal_step_update(step, i, j, dist_vector)
+                    continue
+
+                # Collision: use inelastic momentum conservation (they stick together)
+                self._step_colission_update(step, i, j)
+
+                """# Skip updating velocities if they are at the same position
+                pos_tol = 0.2
+                if np.linalg.norm(dist_vector) < pos_tol:
                     force = 0
                 else:
-                    force = newton_gravity(dist_vector, self.masses, self.gravity_strength)
+                    force = newton_gravity(
+                        dist_vector, self.masses, self.gravity_strength
+                    )
 
-                # Body i
+                
+
+                # Update velocities
                 self.vel[step + 1, i] = (
                     self.vel[step, i] + force / self.masses[i] * self.time_step
                 )
-                self.pos[step + 1, i] = (
-                    self.pos[step, i] + self.vel[step + 1, i] * self.time_step
-                )
-
-                # Body j
                 self.vel[step + 1, j] = (
                     self.vel[step, j] - force / self.masses[j] * self.time_step
                 )
-                self.pos[step + 1, j] = (
-                    self.pos[step, j] + self.vel[step + 1, j] * self.time_step
-                )
+
+                newposi = self.pos[step, i] + self.vel[step + 1, i] * self.time_step
+                newposj = self.pos[step, j] + self.vel[step + 1, j] * self.time_step
 
                 # If collision on this step: use inelastic momentum conservation (they stick together)
-                if (
-                    np.linalg.norm(self.pos[step + 1, i] - self.pos[step + 1, j])
-                    < pos_min
-                ):
+                if np.linalg.norm(newposi - newposj) < pos_tol:
                     v1 = self.vel[step + 1, i]
                     v2 = self.vel[step + 1, j]
+
+                    if all(  # they are already moving together: skip calculations
+                        v1 == v2
+                    ):
+                        continue
+
                     m1 = self.masses[i]
                     m2 = self.masses[j]
-                    # print("Collision at step", step)
-                    # print(v1, v2)
 
-                    # New shared velocity
+                    # New shared velocities
                     denominator = m1 * v1 + m2 * v2
                     if all(denominator == 0):  # momentum cancels out: they must stop
+                        # Set rest of positions to this last value
+                        newpos = self.pos[step + 1, i]
+                        self.pos[step + 1 :, i] = newpos
+                        self.pos[step + 1 :, j] = newpos
+
+                        # New velocities are zero
                         new_vel = np.zeros_like(v1)
-                        self.pos[step + 1 :, i] = self.pos[step + 1, i]
-                        self.pos[step + 1 :, j] = self.pos[step + 1, j]
-                    else:
+
+                    else:  # They move together as one with the rest of the momentum
+                        # ignore warrning for divide by zero
+                        np.seterr(divide="ignore")
+
+                        # Calculate new velocities
                         new_vel = (m1 + m2) / (denominator)
-                        new_vel[new_vel == np.inf] = 0
-                        # print(new_vel)
+                        new_vel[new_vel == np.inf] = 0  # replace inf with zero
+
+                    # Update velocities from collision
                     self.vel[step + 1, i] = new_vel
                     self.vel[step + 1, j] = new_vel
 
-                """# DEBUG: Stop early if they are extremely far away from each other
-                pos_max = 1000
-                if (
-                    np.linalg.norm(self.pos[step + 1, i] - self.pos[step + 1, j])
-                    > pos_max
-                ):
-                    # Replace rest of array with these last values
-                    self.pos[step + 1 :] = self.pos[step + 1]
-                    self._break = True
-                    return"""
+                else:  # No collision: update positions as normal
+                    self.pos[step + 1, i] = newposi
+                    self.pos[step + 1, j] = newposj"""
 
     def plot1d(
         self,
@@ -219,14 +319,14 @@ class GravitySim2D:
         # Plotting
         if axis == "both":
             fig, axs = plt.subplots(2, 1, figsize=figsize)
-            for i in range(n_bodies):
+            for i in range(self.n_bodies):
                 axs[0].plot(self.t, self.pos[:, i, 0], label=f"body {i}")
                 axs[1].plot(self.t, self.pos[:, i, 1], label=f"body {i}")
             axs[0].set_ylabel("x")
             axs[1].set_ylabel("y")
         else:
             fig, ax = plt.subplots(1, 1, figsize=figsize)
-            for i in range(n_bodies):
+            for i in range(self.n_bodies):
                 ax.plot(self.t, self.pos[:, i, axis], label=f"body {i}")
             ylabel = "x" if axis == 0 else "y"
             plt.ylabel(ylabel)
@@ -350,15 +450,25 @@ class GravitySim2D:
 if __name__ == "__main__":
     # Parameters
     time = 2000  # simulation time [s]
-    time_step = 0.2  # time step [s]
-    masses = [1, 1]  # relative body masses
-    gravity_strength = (
-        6.67e-11  # strength of newtons force of gravity (analogous to big G)
-    )
+    time_step = 0.1  # time step [s]
+    gravity_strength = 1  # strength of newtons force of gravity (analogous to big G)
+    masses = [  # relative body masses
+        1,
+        1,
+        1,
+    ]
 
-    # # Set initial conditions for every body
-    r0 = [[0, 0], [0, 50]]  # initial positions of the bodies (x0, y0), (x1, y1) etc.
-    v0 = [[1, 1], [1, -1]]  # initial velocities
+    r0 = [  # Initial positions
+        [0, 0],
+        [0, 50],
+        [10, 25],
+    ]
+    # v0 = [  # Initial velocities
+    #     [1, 1],
+    #     [1, -1],
+    #     [0.5, 0.1],
+    # ]
+    v0 = np.zeros((len(masses), 2))
 
     sim = GravitySim2D(
         time=time,
