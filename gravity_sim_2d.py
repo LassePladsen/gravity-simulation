@@ -328,7 +328,8 @@ class GravitySim2D:
         self,
         ms_interval: float = None,
         filename: Pathlike = "",
-        figsize: tuple[int, int] = (7, 5),
+        figsize: tuple[int, int] = (7, 6),
+        legend: bool = True,
         auto_axes: bool = True,
         margin_ratio: float = 5,
         **kwargs: dict,
@@ -339,6 +340,7 @@ class GravitySim2D:
             ms_interval: milliseconds delay between frames. Defaults to self.time_step.
             filename: filename to save the animation to. If none, shows the animation instead.
             figsize: figure size. Defaults to (7, 5).
+            legend: flag to show legend. Defaults to True.
             auto_axes: flag to automatically adjust axis limits. Defaults to True.
             margin_ratio: ratio of margin to add to the axis limits. Defaults to 50%.
                             is only used when auto_axes is True. Must be greater than 0.
@@ -357,7 +359,7 @@ class GravitySim2D:
         fig, ax = plt.subplots(figsize=figsize)
 
         # Plot initial positions
-        scatters = [ax.scatter(*self.pos[0, i]) for i in range(self.n_bodies)]
+        scatters = [ax.scatter(*self.pos[0, i], label=f"m={self.masses[i]:.0%}") for i in range(self.n_bodies)]
 
         # Initial axis limits
         if auto_axes:
@@ -378,6 +380,8 @@ class GravitySim2D:
         anim = FuncAnimation(fig, update, frames=len(self.t), interval=ms_interval)
 
         # Config
+        if false:
+            plt.legend()
         ax.set_xlabel("x")
         ax.set_ylabel("y")
         plt.axis("equal")
