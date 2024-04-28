@@ -7,7 +7,7 @@ Clone the repo
 git clone https://github.com/LassePladsen/gravity-simulation.git
 ```
 
-Download the package requirements
+Install the dependencies
 ```bash
 python -m pip install -r requirements.txt
 ```
@@ -17,3 +17,5 @@ You can either import the module with
 from gravity_sim_2d import GravitySim2D 
 ```
 or use it directly in the module `gravity_sim_2d.py`.
+
+See `gravity_sim_2d.py` for example usage.
