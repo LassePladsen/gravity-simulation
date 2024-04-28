@@ -336,25 +336,27 @@ class GravitySim2D:
 
     def animate(
         self,
-        ms: float = None,
+        ms_interval: float = None,
         filename: Pathlike = "",
         figsize: tuple[int, int] = (7, 5),
         auto_axes: bool = True,
+        **kwargs: dict,
     ) -> None:
         """Animates the 2D motion of the bodies
 
         arguments:
-            ms: milliseconds delay between frames. Defaults to self.time_step.
+            ms_interval: milliseconds delay between frames. Defaults to self.time_step.
             filename: filename to save the animation to. If none, shows the animation instead.
             figsize: figure size. Defaults to (7, 5).
             auto_axes: flag to automatically adjust axis limits. Defaults to True.
+            kwargs: additional keyword arguments to pass to FuncAnimation.save()
 
         returns:
             None
         """
 
-        if ms is None:
-            ms = self.time_step
+        if ms_interval is None:
+            ms_interval = self.time_step
 
         fig, ax = plt.subplots(figsize=figsize)
 
@@ -375,7 +377,7 @@ class GravitySim2D:
             self._set_axis_limits(ax, frame) if auto_axes else None
 
         # Create animation
-        anim = FuncAnimation(fig, update, frames=len(self.t), interval=ms)
+        anim = FuncAnimation(fig, update, frames=len(self.t), interval=ms_interval)
 
         # Config
         plt.xlabel("x")
@@ -384,17 +386,17 @@ class GravitySim2D:
 
         # Save or show animation
         if filename:
-            anim.save(filename, fps=30, dpi=300)
+            anim.save(filename, **kwargs)
         else:
             plt.show()
 
 
 if __name__ == "__main__":
     ### EXAMPLE USAGE
-    
+
     # Parameters
-    time = 2000  # simulation time [s]
-    time_step = 0.2  # time step [s]
+    time = 500  # simulation time [s]
+    time_step = 1  # time step [s]
     gravity_strength = 1e4  # strength of newtons force of gravity (analogous to big G)
 
     masses = [  # relative body mass ratios
@@ -410,7 +412,7 @@ if __name__ == "__main__":
     ]
     v0 = [  # Initial velocities
         [0, 5],
-        [1, 3],
+        [3, 4],
         [-1, 1],
     ]
 
@@ -423,5 +425,9 @@ if __name__ == "__main__":
     )
     sim.simulate(r0, v0)
     # sim.plot1d()
-    # sim.animate()
-    sim.animate(filename="example.mp4")
+    # sim.animate(interval=0)
+    sim.animate(filename="example.gif", fps=30, dpi=300)
+
+    """Warning: saving the animation to a file will take a while for ffmpeg to 
+    process if the simulation time is long.
+    Inputting no filename will instead show the animation in a window, which is instant"""
