@@ -282,57 +282,47 @@ class GravitySim2D:
         else:
             plt.show()
 
-    def _set_axis_limits(
-        self, ax: plt.Axes, frame: int, grow: float = 5, shrink: float = 51 / 100
-    ) -> None:
+    def _set_axis_limits(self, ax: plt.Axes, frame: int, margin_ratio: float) -> None:
         """Sets the axis limits to fit all bodies in the plot,
         if they are significantly outside/inside the current limits
 
         arguments:
             ax: the matplotlib axis object
-            frame: the current frame number
-            grow: grow scale factor to multiply limits by.
-            shrink: shrink scale factor. This is the ratio of the current square
-                    to set the new limits from as [shrink * (x1-x0, y1-y0)]
-                    Must be between 0 and 1.
 
         returns:
             None
         """
-        if not 0 < shrink < 1:
-            raise ValueError("shrink ratio must be between 0 and 1")
 
         x0, x1 = ax.get_xlim()
         y0, y1 = ax.get_ylim()
+        pos = self.pos[frame]
+        x_min, x_max = pos[:, 0].min(), pos[:, 0].max()
+        y_min, y_max = pos[:, 1].min(), pos[:, 1].max()
+
+        x_margin = (x_max - x_min) * margin_ratio
+        y_margin = (y_max - y_min) * margin_ratio
 
         # Handle the cases where bodies exit the limits/the figure
         if (
-            any(self.pos[frame, :, 0] < x0)
-            or any(self.pos[frame, :, 0] > x1)
-            or any(self.pos[frame, :, 1] < y0)
-            or any(self.pos[frame, :, 1] > y1)
+            any(pos[:, 0] < x0)
+            or any(pos[:, 0] > x1)
+            or any(pos[:, 1] < y0)
+            or any(pos[:, 1] > y1)
         ):
-            x0 -= abs(x0 * grow)
-            ax.set_xlim(x0, -x0)
-            y0 -= abs(y0 * grow)
-            ax.set_ylim(y0, -y0)
+
+            ax.set_xlim(x_min - x_margin, x_max + x_margin)
+            ax.set_ylim(y_min - y_margin, y_max + y_margin)
+            return
 
         # Handle the case where the limits are too big for the current body positions
         # This will be when all bodies are inside a certain fraction of total limit square
-        dx = (1 - shrink) * (x1 - x0)
-        dy = (1 - shrink) * (y1 - y0)
-        x0 += dx
-        x1 -= dx
-        y0 += dy
-        y1 -= dy
-        if (
-            all(self.pos[frame, :, 0] > x0)
-            and all(self.pos[frame, :, 0] < x1)
-            and all(self.pos[frame, :, 1] > y0)
-            and all(self.pos[frame, :, 1] < y1)
-        ):
-            ax.set_xlim(x0, x1)
-            ax.set_ylim(y0, y1)
+
+        x_cond = (x_max - x_min) / (x1 - x0) < margin_ratio / 100
+        y_cond = (y_max - y_min) / (y1 - y0) < margin_ratio / 100
+        if x_cond and y_cond:
+            a = 2  # Halve the current margin ratio
+            ax.set_xlim(x_min - x_margin / a, x_max + x_margin / a)
+            ax.set_ylim(y_min - y_margin / a, y_max + y_margin / a)
 
     def animate(
         self,
@@ -340,6 +330,7 @@ class GravitySim2D:
         filename: Pathlike = "",
         figsize: tuple[int, int] = (7, 5),
         auto_axes: bool = True,
+        margin_ratio: float = 5,
         **kwargs: dict,
     ) -> None:
         """Animates the 2D motion of the bodies
@@ -349,11 +340,16 @@ class GravitySim2D:
             filename: filename to save the animation to. If none, shows the animation instead.
             figsize: figure size. Defaults to (7, 5).
             auto_axes: flag to automatically adjust axis limits. Defaults to True.
+            margin_ratio: ratio of margin to add to the axis limits. Defaults to 50%.
+                            is only used when auto_axes is True. Must be greater than 0.
             kwargs: additional keyword arguments to pass to FuncAnimation.save()
 
         returns:
             None
         """
+
+        if 0 >= margin_ratio:
+            raise ValueError("margin_ratio must be greater than 0.")
 
         if ms_interval is None:
             ms_interval = self.time_step
@@ -364,7 +360,8 @@ class GravitySim2D:
         scatters = [ax.scatter(*self.pos[0, i]) for i in range(self.n_bodies)]
 
         # Initial axis limits
-        self._set_axis_limits(ax, 0) if auto_axes else None
+        if auto_axes:
+            self._set_axis_limits(ax, 0, margin_ratio)
 
         def update(frame: int):
             for i, scatter in enumerate(scatters):
@@ -374,14 +371,15 @@ class GravitySim2D:
             fig.suptitle(f"Time: {self.t[frame]:.2f} s")
 
             # Update axis limits to fit all bodies
-            self._set_axis_limits(ax, frame) if auto_axes else None
+            if auto_axes:
+                self._set_axis_limits(ax, frame, margin_ratio)
 
         # Create animation
         anim = FuncAnimation(fig, update, frames=len(self.t), interval=ms_interval)
 
         # Config
-        plt.xlabel("x")
-        plt.ylabel("y")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
         plt.axis("equal")
 
         # Save or show animation
@@ -425,8 +423,8 @@ if __name__ == "__main__":
     )
     sim.simulate(r0, v0)
     # sim.plot1d()
-    # sim.animate(interval=0)
-    sim.animate(filename="example.gif", fps=30, dpi=300)
+    sim.animate()
+    # sim.animate(filename="example.gif", fps=30, dpi=300)
 
     """Warning: saving the animation to a file will take a while for ffmpeg to 
     process if the simulation time is long.
