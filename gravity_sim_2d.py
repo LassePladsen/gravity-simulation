@@ -380,7 +380,7 @@ class GravitySim2D:
         anim = FuncAnimation(fig, update, frames=len(self.t), interval=ms_interval)
 
         # Config
-        if false:
+        if legend:
             plt.legend()
         ax.set_xlabel("x")
         ax.set_ylabel("y")
